@@ -31,7 +31,7 @@ class MultiContextTest extends FunSuite with ScalaFutures {
       implicit val ec: ExecutionContext = ecs(name)
 
       val tester = new Tester
-      val mixer = new Mixer(new Blocking, new NonBlocking)
+      val mixer = new Mixer(new Blocking, new NonBlocking, new PatternService(rawActors))
       assert(tester.load(20, mixer.fast, mixer.mix, mixer.medium).futureValue === true)
     }
   }
@@ -40,13 +40,14 @@ class MultiContextTest extends FunSuite with ScalaFutures {
     (1 to n).map(_ => keys(Random.nextInt(keys.length))).toList
   }
 
-  (1 to 20).map(_ => sample(4)).distinct foreach { case List(main, block, nBlock, mix, _*) =>
+  (1 to 20).map(_ => sample(5)).distinct foreach { case List(main, block, nBlock, mix, actors, _*) =>
     test(s"main: $main, block: $block, non-block: $nBlock, mix: $mix") {
       val tester = new Tester()(ecs(main))
       val blocking = new Blocking()(ecs(block))
       val nonBlocking = new NonBlocking()(ecs(nBlock))
-      val mixer = new Mixer(blocking, nonBlocking)(ecs(mix))
-      assert(tester.load(100, mixer.fast, mixer.mix, blocking.fast, blocking.medium, nonBlocking.fast).futureValue === true)
+      val patterns = new PatternService(flowedActors)(ecs(actors))
+      val mixer = new Mixer(blocking, nonBlocking, patterns)(ecs(mix))
+      assert(tester.load(20, mixer.fast, mixer.mix, blocking.fast, blocking.medium, nonBlocking.fast).futureValue === true)
     }
   }
 
