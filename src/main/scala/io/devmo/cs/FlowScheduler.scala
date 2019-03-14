@@ -6,22 +6,12 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 
 class FlowScheduler(target: Scheduler) extends Scheduler {
-  class AddCurrentFlow(r: Runnable) extends Runnable {
-    private val callerFlow = FlowContextHolder.current()
-
-    override def run(): Unit = {
-      val previous = FlowContextHolder.swap(callerFlow)
-      r.run()
-      FlowContextHolder.swap(previous)
-    }
-  }
-
   override def schedule(initialDelay: FiniteDuration, interval: FiniteDuration, runnable: Runnable)
                        (implicit executor: ExecutionContext): Cancellable =
-    target.schedule(initialDelay, interval, new AddCurrentFlow(runnable))
+    target.schedule(initialDelay, interval, RunnableWithFlow(runnable))
   override def scheduleOnce(delay: FiniteDuration, runnable: Runnable)
                            (implicit executor: ExecutionContext): Cancellable =
-    target.scheduleOnce(delay, new AddCurrentFlow(runnable))
+    target.scheduleOnce(delay, RunnableWithFlow(runnable))
   override def maxFrequency: Double = target.maxFrequency
 }
 
