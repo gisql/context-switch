@@ -17,7 +17,7 @@ class StreamServiceTest extends FunSuite with ScalaFutures {
   private val expected = FlowContext("test")
   FlowContextHolder.swap(expected)
 
-  private val tested = new StreamService(2000)
+  private lazy val tested = new StreamService(10000, 20)
 
   test("fast should return true") {
     assert(tested.fast(expected).futureValue === true)

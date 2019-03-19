@@ -4,6 +4,7 @@ import java.util.UUID
 import java.util.concurrent._
 
 import akka.actor.ActorSystem
+import akka.stream.{ActorMaterializer, Materializer}
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Millis, Span}
@@ -14,6 +15,7 @@ import scala.util.Random
 class MultiContextTest extends FunSuite with ScalaFutures {
   private implicit val pc: PatienceConfig = PatienceConfig(timeout = scaled(Span(150000, Millis)), interval = scaled(Span(100, Millis)))
   private val rawActors = ActorSystem()
+  private val mat: Materializer = FlowMaterialiser(ActorMaterializer()(rawActors))
   private val flowedActors = ActorSystem("proper-rest", None, None, Some(FlowExecutionContext(ExecutionContext.fromExecutor(new ForkJoinPool(16)))))
 
   private val ecs = Map[String, ExecutionContext](
@@ -31,7 +33,8 @@ class MultiContextTest extends FunSuite with ScalaFutures {
       implicit val ec: ExecutionContext = ecs(name)
 
       val tester = new Tester
-      val mixer = new Mixer(new Blocking, new NonBlocking, new PatternService(rawActors))
+      val httpLike = new StreamService(20000, 100)(implicitly[ExecutionContext], mat)
+      val mixer = new Mixer(new Blocking, new NonBlocking, new PatternService(rawActors), httpLike)
       assert(tester.load(20, mixer.fast, mixer.mix, mixer.medium).futureValue === true)
     }
   }
@@ -40,13 +43,14 @@ class MultiContextTest extends FunSuite with ScalaFutures {
     (1 to n).map(_ => keys(Random.nextInt(keys.length))).toList
   }
 
-  (1 to 20).map(_ => sample(5)).distinct foreach { case List(main, block, nBlock, mix, actors, _*) =>
-    test(s"main: $main, block: $block, non-block: $nBlock, mix: $mix") {
+  (1 to 30).map(_ => sample(6)).distinct foreach { case List(main, block, nBlock, mix, actors, streams, _*) =>
+    test(s"main: $main, block: $block, non-block: $nBlock, mix: $mix, streams: $streams") {
       val tester = new Tester()(ecs(main))
       val blocking = new Blocking()(ecs(block))
       val nonBlocking = new NonBlocking()(ecs(nBlock))
       val patterns = new PatternService(flowedActors)(ecs(actors))
-      val mixer = new Mixer(blocking, nonBlocking, patterns)(ecs(mix))
+      val httpLike = new StreamService(20000, 100)(ecs(streams), mat)
+      val mixer = new Mixer(blocking, nonBlocking, patterns, httpLike)(ecs(mix))
       assert(tester.load(20, mixer.fast, mixer.mix, blocking.fast, blocking.medium, nonBlocking.fast).futureValue === true)
     }
   }

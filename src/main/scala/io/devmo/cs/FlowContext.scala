@@ -10,17 +10,18 @@ object FlowContextHolder {
   private val holder = new ThreadLocal[FlowContext]() {
     override def initialValue(): FlowContext = FlowContext("unknown")
   }
-  private val al = new AtomicLong()
 
-  def current(): FlowContext = holder.get()
+  implicit def current: FlowContext = holder.get()
   def swap(x: FlowContext): FlowContext = {
-    val rv = current()
+    val rv = current
     holder.set(x)
     rv
   }
 
+  // for tests
+  private val al = new AtomicLong()
   def verify(expected: FlowContext): Boolean = {
-    val ok = expected == current()
+    val ok = expected == current
     if (!ok) al.incrementAndGet()
     ok
   }
@@ -31,7 +32,7 @@ object FlowContextHolder {
 
 class FlowExecutionContext(target: ExecutionContext) extends ExecutionContextExecutor {
   override def execute(runnable: Runnable): Unit = {
-    val callerFlow = FlowContextHolder.current()
+    val callerFlow = FlowContextHolder.current
 
     target.execute(() => {
       val previousFlow = FlowContextHolder.swap(callerFlow)
